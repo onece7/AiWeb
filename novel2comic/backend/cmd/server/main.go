@@ -1,0 +1,125 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"novel2comic/backend/internal/config"
+	"novel2comic/backend/internal/models"
+	"novel2comic/backend/internal/repository"
+	"novel2comic/backend/internal/router"
+	"novel2comic/backend/internal/service"
+	"novel2comic/backend/pkg/redis"
+	"novel2comic/backend/pkg/response"
+
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+func main() {
+	// 加载配置
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("加载配置失败: %v", err)
+	}
+
+	// 初始化数据库
+	db, err := initDB(cfg)
+	if err != nil {
+		log.Fatalf("连接数据库失败: %v", err)
+	}
+
+	// 自动迁移
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.ImageStyle{},
+		&models.GenerationRecord{},
+	); err != nil {
+		log.Fatalf("数据库迁移失败: %v", err)
+	}
+
+	// 初始化 Redis
+	rdb, err := redis.NewClient(cfg)
+	if err != nil {
+		log.Fatalf("连接 Redis 失败: %v", err)
+	}
+
+	// 初始化统一响应
+	response.Init()
+
+	// 依赖注入 - Repository 层
+	userRepo := repository.NewUserRepository(db)
+	styleRepo := repository.NewStyleRepository(db)
+	generationRepo := repository.NewGenerationRepository(db)
+
+	// 依赖注入 - Service 层
+	authService := service.NewAuthService(userRepo, rdb, cfg)
+	sdClient := service.NewSDClient(cfg)
+	generationService := service.NewGenerationService(generationRepo, styleRepo, sdClient, cfg)
+	historyService := service.NewHistoryService(generationRepo)
+
+	// 初始化路由
+	r := router.Setup(cfg, authService, generationService, historyService)
+
+	// 启动服务器
+	srv := &http.Server{
+		Addr:           fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler:        r,
+		ReadTimeout:    15 * time.Second,
+		WriteTimeout:   60 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	// 优雅关闭
+	go func() {
+		fmt.Printf("🚀 服务启动: http://localhost:%d\n", cfg.Server.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("服务启动失败: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	fmt.Println("\n🛑 正在关闭服务...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("服务关闭失败: %v", err)
+	}
+	fmt.Println("✅ 服务已安全关闭")
+}
+
+func initDB(cfg *config.Config) (*gorm.DB, error) {
+	logLevel := logger.Info
+	if cfg.Server.Mode == "release" {
+		logLevel = logger.Warn
+	}
+
+	db, err := gorm.Open(mysql.Open(cfg.Database.DSN()), &gorm.Config{
+		Logger: logger.Default.LogMode(logLevel),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
+	sqlDB.SetConnMaxLifetime(time.Duration(cfg.Database.ConnMaxLifetime) * time.Second)
+
+	return db, nil
+}
