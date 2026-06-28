@@ -63,7 +63,7 @@ func (rl *RateLimiter) Handler() gin.HandlerFunc {
 		// 消费令牌
 		if v.tokens < 1 {
 			rl.mu.Unlock()
-			response.Error(c, 429, 50000, "请求过于频繁，请稍后重试")
+			response.TooManyRequests(c, "")
 			c.Abort()
 			return
 		}

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -23,11 +24,10 @@ func NewGenerationHandler(genService *service.GenerationService) *GenerationHand
 // GetStyles 获取可用风格列表
 // GET /api/v1/generate/styles
 func (h *GenerationHandler) GetStyles(c *gin.Context) {
-	// TODO: 从 styleRepo 获取活跃风格
-	// 目前返回示例数据
-	styles := []map[string]interface{}{
-		{"id": 1, "name": "anime", "display_name": "动漫风格", "description": "日系动漫风格"},
-		{"id": 2, "name": "realistic", "display_name": "写实风格", "description": "照片级真实感"},
+	styles, err := h.genService.GetActiveStyles(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, response.CodeInternal, "获取风格列表失败")
+		return
 	}
 	response.Success(c, styles)
 }

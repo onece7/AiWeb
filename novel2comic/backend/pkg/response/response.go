@@ -18,6 +18,7 @@ const (
 	CodeGenFailed     = 42000
 	CodeGenTimeout    = 42001
 	CodeGenBusy       = 42002
+	CodeRateLimited   = 42900
 	CodeHistoryNotFound = 44000
 	CodeInternal      = 50000
 )
@@ -34,6 +35,7 @@ var messages = map[int]string{
 	CodeGenFailed:     "图片生成失败",
 	CodeGenTimeout:    "图片生成超时",
 	CodeGenBusy:       "生成队列繁忙，请稍后重试",
+	CodeRateLimited:   "请求过于频繁，请稍后重试",
 	CodeHistoryNotFound: "记录不存在",
 	CodeInternal:      "服务器内部错误",
 }
@@ -108,6 +110,11 @@ func Unauthorized(c *gin.Context, message string) {
 // Forbidden 403 无权限
 func Forbidden(c *gin.Context, message string) {
 	Error(c, http.StatusForbidden, CodeForbidden, message)
+}
+
+// TooManyRequests 429 请求过于频繁
+func TooManyRequests(c *gin.Context, message string) {
+	Error(c, http.StatusTooManyRequests, CodeRateLimited, message)
 }
 
 // NotFound 404 资源不存在

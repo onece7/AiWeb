@@ -64,6 +64,7 @@ http.interceptors.response.use(
         isRefreshing = true
 
         try {
+          // 使用裸 axios 避免请求拦截器添加过期 token，且防止递归刷新
           const res = await axios.post('/api/v1/auth/refresh', {
             refresh_token: authStore.refreshToken,
           })

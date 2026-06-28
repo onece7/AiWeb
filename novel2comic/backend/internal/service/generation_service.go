@@ -39,6 +39,11 @@ func NewGenerationService(
 	}
 }
 
+// GetActiveStyles 获取所有活跃的风格
+func (s *GenerationService) GetActiveStyles(ctx context.Context) ([]models.ImageStyle, error) {
+	return s.styleRepo.FindActive(ctx)
+}
+
 // GenerateSimple 普通模式生成：使用预设风格
 func (s *GenerationService) GenerateSimple(ctx context.Context, userID uint64, req *models.SimpleGenerateRequest) (*models.GenerateResponse, error) {
 	// 获取风格
