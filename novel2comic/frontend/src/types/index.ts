@@ -10,7 +10,7 @@ export interface User {
   id: number
   username: string
   phone: string
-  created_at: string
+  created_at?: string
 }
 
 export interface LoginRequest {

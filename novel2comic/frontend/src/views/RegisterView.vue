@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 const form = reactive({
@@ -43,7 +44,7 @@ async function handleRegister() {
   loading.value = true
   try {
     await authStore.register(form.username.trim(), form.phone.trim(), form.password)
-    router.push('/generate/simple')
+    router.push((route.query.redirect as string) || '/generate/simple')
   } catch (e: any) {
     error.value = e.response?.data?.message || e.message || '注册失败'
   } finally {

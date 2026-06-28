@@ -64,7 +64,7 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 	}
 
 	// 生成 Token
-	return s.generateTokenPair(user.ID, user.Username)
+	return s.generateTokenPair(ctx, user.ID, user.Username)
 }
 
 // Login 用户登录
@@ -83,7 +83,7 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		return nil, errors.New("用户名或密码错误")
 	}
 
-	return s.generateTokenPair(user.ID, user.Username)
+	return s.generateTokenPair(ctx, user.ID, user.Username)
 }
 
 // RefreshToken 刷新 Token
@@ -103,13 +103,15 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*m
 
 	// 查找用户
 	var userID uint64
-	fmt.Sscanf(userIDStr, "%d", &userID)
+	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil {
+		return nil, errors.New("无效的 Refresh Token")
+	}
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, errors.New("用户不存在")
 	}
 
-	return s.generateTokenPair(user.ID, user.Username)
+	return s.generateTokenPair(ctx, user.ID, user.Username)
 }
 
 // Logout 登出
@@ -143,9 +145,7 @@ func (s *AuthService) IsTokenBlacklisted(ctx context.Context, token string) bool
 }
 
 // generateTokenPair 生成 Token 对
-func (s *AuthService) generateTokenPair(userID uint64, username string) (*models.LoginResponse, error) {
-	ctx := context.Background()
-
+func (s *AuthService) generateTokenPair(ctx context.Context, userID uint64, username string) (*models.LoginResponse, error) {
 	// 生成 Access Token
 	accessToken, expiresIn, err := s.jwt.GenerateAccessToken(userID, username)
 	if err != nil {
@@ -153,7 +153,10 @@ func (s *AuthService) generateTokenPair(userID uint64, username string) (*models
 	}
 
 	// 生成 Refresh Token
-	refreshToken := generateRefreshToken()
+	refreshToken, err := generateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
 	refreshHash := hashToken(refreshToken)
 	key := fmt.Sprintf("refresh:%s", refreshHash)
 
@@ -169,10 +172,12 @@ func (s *AuthService) generateTokenPair(userID uint64, username string) (*models
 }
 
 // generateRefreshToken 生成随机 Refresh Token
-func generateRefreshToken() string {
+func generateRefreshToken() (string, error) {
 	b := make([]byte, 32)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("生成随机令牌失败: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // hashToken 对 Token 做 SHA256 哈希

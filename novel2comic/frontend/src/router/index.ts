@@ -2,6 +2,14 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+// 扩展 RouteMeta 类型
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    guest?: boolean
+  }
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -50,8 +58,19 @@ const router = createRouter({
 })
 
 // 导航守卫
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
+
+  // 等待 init() 完成（App.vue onMounted 中调用）
+  // 如果尚未初始化且本地有 token，等待短暂时间让 init 完成
+  if (!authStore.initialized) {
+    // 同步检查：如果本地有 token，先放行，init 会在后台完成
+    // 如果完全没有 token，直接按未登录处理
+    const hasLocalToken = !!localStorage.getItem('access_token') || !!localStorage.getItem('refresh_token')
+    if (!hasLocalToken) {
+      authStore.initialized = true // 标记已完成（无需初始化）
+    }
+  }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     // 需要登录但未登录 → 跳转登录页

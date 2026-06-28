@@ -1,10 +1,12 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 
 	"novel2comic/backend/internal/service"
 	"novel2comic/backend/pkg/jwt"
@@ -40,7 +42,11 @@ func AuthRequired(authService *service.AuthService, jwtManager *jwt.Manager) gin
 		// 解析 Token
 		claims, err := jwtManager.ParseAccessToken(tokenString)
 		if err != nil {
-			response.Error(c, http.StatusUnauthorized, response.CodeTokenExpired, "Token 无效或已过期")
+			if errors.Is(err, jwtv5.ErrTokenExpired) {
+				response.Error(c, http.StatusUnauthorized, response.CodeTokenExpired, "Token 已过期")
+			} else {
+				response.Error(c, http.StatusUnauthorized, response.CodeUnauthorized, "Token 无效")
+			}
 			c.Abort()
 			return
 		}
