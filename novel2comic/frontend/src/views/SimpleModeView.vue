@@ -10,6 +10,7 @@ const prompt = ref('')
 const styles = ref<ImageStyle[]>([])
 const selectedStyle = ref<ImageStyle | null>(null)
 const stylesLoading = ref(true)
+const stylesError = ref('')
 
 // 生成状态
 const currentRecordId = ref<number | null>(null)
@@ -22,13 +23,8 @@ onMounted(async () => {
   try {
     const res = await generationApi.getStyles()
     styles.value = res.data.data
-  } catch {
-    // 使用 mock 数据
-    styles.value = [
-      { id: 1, name: 'anime', display_name: '动漫风格', description: '日系动漫风格', preset_params: {}, sort_order: 1, preview_url: '', is_active: true },
-      { id: 2, name: 'realistic', display_name: '写实风格', description: '照片级写实', preset_params: {}, sort_order: 2, preview_url: '', is_active: true },
-      { id: 3, name: 'watercolor', display_name: '水彩风格', description: '柔和的水彩画', preset_params: {}, sort_order: 3, preview_url: '', is_active: true },
-    ]
+  } catch (e: any) {
+    stylesError.value = e.response?.data?.message || e.message || '加载风格列表失败'
   } finally {
     stylesLoading.value = false
   }
@@ -116,6 +112,10 @@ function downloadImage() {
           :loading="stylesLoading"
           @select="selectStyle"
         />
+        <div v-if="stylesError"
+             class="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
+          {{ stylesError }}
+        </div>
         <button
           @click="generate"
           :disabled="!prompt.trim() || !selectedStyle || generating"

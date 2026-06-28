@@ -55,23 +55,24 @@ func (r *RedisConfig) Addr() string {
 
 // JWTConfig JWT 配置
 type JWTConfig struct {
-	Secret           string `mapstructure:"secret"`
-	AccessTokenTTL   int    `mapstructure:"access_token_ttl"`   // 分钟
-	RefreshTokenTTL  int    `mapstructure:"refresh_token_ttl"`  // 小时
+	Secret          string `mapstructure:"secret"`
+	AccessTokenTTL  int    `mapstructure:"access_token_ttl"`  // 分钟
+	RefreshTokenTTL int    `mapstructure:"refresh_token_ttl"` // 小时
 }
 
 // SDConfig Stable Diffusion 配置
 type SDConfig struct {
-	BaseURL        string `mapstructure:"base_url"`        // A1111 地址
-	APIKey         string `mapstructure:"api_key"`          // Replicate API Key
-	MaxConcurrent  int    `mapstructure:"max_concurrent"`   // 最大并发数
-	RequestTimeout int    `mapstructure:"request_timeout"`  // 请求超时(秒)
+	BaseURL           string `mapstructure:"base_url"`            // A1111 地址
+	APIKey            string `mapstructure:"api_key"`             // Replicate API Key
+	MaxConcurrent     int    `mapstructure:"max_concurrent"`      // 最大全局并发数
+	MaxUserConcurrent int    `mapstructure:"max_user_concurrent"` // 单用户最大并发数
+	RequestTimeout    int    `mapstructure:"request_timeout"`     // 请求超时(秒)
 }
 
 // UploadConfig 上传配置
 type UploadConfig struct {
-	Dir      string `mapstructure:"dir"`       // 图片存储目录
-	MaxSize  int64  `mapstructure:"max_size"`  // 最大文件大小(MB)
+	Dir     string `mapstructure:"dir"`      // 图片存储目录
+	MaxSize int64  `mapstructure:"max_size"` // 最大文件大小(MB)
 }
 
 // Load 加载配置: 先读 config.yaml，环境变量可覆盖
@@ -130,6 +131,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("jwt.refresh_token_ttl", 168) // 7 天
 
 	v.SetDefault("sd.max_concurrent", 2)
+	v.SetDefault("sd.max_user_concurrent", 3)
 	v.SetDefault("sd.request_timeout", 300)
 
 	v.SetDefault("upload.dir", "uploads/generated")

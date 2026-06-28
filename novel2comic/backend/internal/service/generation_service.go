@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -16,11 +17,12 @@ import (
 
 // GenerationService 图片生成服务
 type GenerationService struct {
-	genRepo  repository.GenerationRepository
-	styleRepo repository.StyleRepository
-	sdClient *sdClient
-	cfg      *config.Config
-	sem      chan struct{} // 并发控制信号量
+	genRepo          repository.GenerationRepository
+	styleRepo        repository.StyleRepository
+	sdClient         *sdClient
+	cfg              *config.Config
+	sem              chan struct{} // 全局并发控制信号量
+	maxUserConcurrent int          // 单用户最大并发数
 }
 
 // NewGenerationService 创建生成 Service
@@ -31,11 +33,12 @@ func NewGenerationService(
 	cfg *config.Config,
 ) *GenerationService {
 	return &GenerationService{
-		genRepo:   genRepo,
-		styleRepo: styleRepo,
-		sdClient:  sdClient,
-		cfg:       cfg,
-		sem:       make(chan struct{}, cfg.SD.MaxConcurrent),
+		genRepo:           genRepo,
+		styleRepo:         styleRepo,
+		sdClient:          sdClient,
+		cfg:               cfg,
+		sem:               make(chan struct{}, cfg.SD.MaxConcurrent),
+		maxUserConcurrent: cfg.SD.MaxUserConcurrent,
 	}
 }
 
@@ -44,8 +47,25 @@ func (s *GenerationService) GetActiveStyles(ctx context.Context) ([]models.Image
 	return s.styleRepo.FindActive(ctx)
 }
 
+// checkUserConcurrent 检查用户并发限制
+func (s *GenerationService) checkUserConcurrent(ctx context.Context, userID uint64) error {
+	count, err := s.genRepo.CountPendingByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("查询用户并发状态失败: %w", err)
+	}
+	if count >= int64(s.maxUserConcurrent) {
+		return fmt.Errorf("已有 %d 个任务在处理中，请等待完成后再提交（每人最多 %d 个并发）", count, s.maxUserConcurrent)
+	}
+	return nil
+}
+
 // GenerateSimple 普通模式生成：使用预设风格
 func (s *GenerationService) GenerateSimple(ctx context.Context, userID uint64, req *models.SimpleGenerateRequest) (*models.GenerateResponse, error) {
+	// 检查用户并发限制
+	if err := s.checkUserConcurrent(ctx, userID); err != nil {
+		return nil, err
+	}
+
 	// 获取风格
 	style, err := s.styleRepo.FindByID(ctx, req.StyleID)
 	if err != nil {
@@ -101,6 +121,11 @@ func (s *GenerationService) GenerateSimple(ctx context.Context, userID uint64, r
 
 // GeneratePro 专业模式生成：自定义参数
 func (s *GenerationService) GeneratePro(ctx context.Context, userID uint64, req *models.ProGenerateRequest) (*models.GenerateResponse, error) {
+	// 检查用户并发限制
+	if err := s.checkUserConcurrent(ctx, userID); err != nil {
+		return nil, err
+	}
+
 	// 填充默认值
 	if req.Width == 0 {
 		req.Width = 512
@@ -195,7 +220,7 @@ func (s *GenerationService) processGeneration(recordID uint64) {
 	}
 
 	// 保存图片到本地
-	imageURL, err := saveGeneratedImage(s.cfg.Upload.Dir, record.UserID, recordID, result.ImageData)
+	imageURL, err := saveGeneratedImage(s.cfg.Upload.Dir, record.UserID, result.ImageData)
 	if err != nil {
 		record.Status = models.StatusFailed
 		record.ErrorMessage = fmt.Sprintf("保存图片失败: %v", err)
@@ -211,9 +236,11 @@ func (s *GenerationService) processGeneration(recordID uint64) {
 }
 
 // saveGeneratedImage 保存生成的图片到本地
-func saveGeneratedImage(uploadDir string, userID, recordID uint64, imageData []byte) (string, error) {
-	// 确保目录存在
-	dir := filepath.Join(uploadDir, fmt.Sprintf("%d", userID))
+// 返回 URL 风格的相对路径（/ 分隔符，跨平台兼容）
+func saveGeneratedImage(uploadDir string, userID uint64, imageData []byte) (string, error) {
+	// 确保目录存在（文件系统操作使用 filepath.Join）
+	userDir := fmt.Sprintf("%d", userID)
+	dir := filepath.Join(uploadDir, userDir)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", err
 	}
@@ -226,6 +253,6 @@ func saveGeneratedImage(uploadDir string, userID, recordID uint64, imageData []b
 		return "", err
 	}
 
-	// 返回相对路径
-	return filepath.Join(fmt.Sprintf("%d", userID), filename), nil
+	// 返回 URL 风格相对路径（path.Join 始终使用 /）
+	return path.Join(userDir, filename), nil
 }
