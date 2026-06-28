@@ -1,0 +1,41 @@
+# ==================== 依赖 ====================
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# ==================== 构建产物 ====================
+backend/server
+backend/server.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ==================== 环境配置 ====================
+.env
+backend/.env
+frontend/.env
+*.local
+backend/config.yaml
+
+# ==================== 上传/生成文件 ====================
+backend/uploads/generated/*
+!backend/uploads/generated/.gitkeep
+
+# ==================== IDE ====================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ==================== Go ====================
+vendor/
+
+# ==================== 日志 ====================
+*.log
+
+# ==================== Docker ====================
+docker-compose.override.yml

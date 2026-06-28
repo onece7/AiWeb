@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: n2c-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: novel2comic
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/migrations:/docker-entrypoint-initdb.d  # 自动建表
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: n2c-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: n2c-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      N2C_SERVER_PORT: 8080
+      N2C_SERVER_MODE: release
+      N2C_DATABASE_HOST: mysql
+      N2C_DATABASE_PORT: 3306
+      N2C_DATABASE_USER: root
+      N2C_DATABASE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      N2C_DATABASE_DBNAME: novel2comic
+      N2C_REDIS_HOST: redis
+      N2C_REDIS_PORT: 6379
+      N2C_JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    volumes:
+      - generated_images:/app/uploads/generated
+
+volumes:
+  mysql_data:
+  redis_data:
+  generated_images:
